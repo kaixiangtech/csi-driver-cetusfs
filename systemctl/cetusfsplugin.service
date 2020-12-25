@@ -1,0 +1,16 @@
+[Unit]
+Description=Andesxio Block Storage for K8S CSI plugin
+After=network.target
+Wants=syslog.target
+
+[Service]
+EnvironmentFile=-/etc/default/cetusfsplugin
+ExecStart=/usr/sbin/cetusfsplugin --drivername=cetusfs.csi.k8s.io --v=5 --endpoint=unix:///var/lib/kubelet/plugins/csi-cetusfs/csi.sock --nodeid=%H
+PIDFile=/var/run/cetusfsplugin.pid
+Restart=always
+StartLimitInterval=10s
+StartLimitBurst=0
+LimitNOFILE=32768
+
+[Install]
+WantedBy=multi-user.target
