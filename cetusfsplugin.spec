@@ -31,6 +31,9 @@ make install DESTDIR=%{buildroot}
 %doc
 
 
+%post
+systemctl daemon-reload
+
 
 %changelog
 

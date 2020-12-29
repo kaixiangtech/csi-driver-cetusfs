@@ -22,11 +22,11 @@ install:
 	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-resizer.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-resizer.yaml
 	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-testing.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-testing.yaml
 	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-storageclass.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-storageclass.yaml
-	$(shell systemctl daemon-reload)
+	systemctl daemon-reload
 uninstall:
 	rm -f /usr/sbin/cetusfsplugin
 	rm -f /lib/systemd/system/cetusfsplugin.service
-	$(shell systemctl daemon-reload)
+	systemctl daemon-reload
 
 
 PHONY: all clean install uninstall
