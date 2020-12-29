@@ -57,8 +57,8 @@ spec:
             name: socket-dir
           - mountPath: /registration
             name: registration-dir
-          - mountPath: /csi-data-dir
-            name: csi-data-dir
+          - mountPath: /csi-cetusfs-data-dir
+            name: csi-cetusfs-data-dir
 
       volumes:
         - hostPath:
@@ -82,7 +82,7 @@ spec:
             # using /tmp is also possible while the PVs will not available after plugin container recreation or host reboot
             path: /var/lib/csi-cetusfs-data/
             type: DirectoryOrCreate
-          name: csi-data-dir
+          name: csi-cetusfs-data-dir
         - hostPath:
             path: /dev
             type: Directory

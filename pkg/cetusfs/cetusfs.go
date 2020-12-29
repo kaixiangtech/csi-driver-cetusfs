@@ -24,6 +24,8 @@ import (
     "os"
     "path/filepath"
     "strings"
+    "syscall"
+    "encoding/json"
 
     "github.com/golang/glog"
     "google.golang.org/grpc/codes"
@@ -88,7 +90,7 @@ const (
     // Directory where data for volumes and snapshots are persisted.
     // This can be ephemeral within the container or persisted if
     // backed by a Pod volume.
-    dataRoot = "/csi-data-dir"
+    dataRoot = "/csi-cetusfs-data-dir"
 
     // Extension with which snapshot files will be saved.
     snapshotExt = ".snap"
@@ -142,6 +144,56 @@ func getSnapshotID(file string) (bool, string) {
     return false, ""
 }
 
+func discoverExistingVol() {
+    csijsonfile := "/etc/neucli/cetusfs_csi_info.json"
+    glog.V(4).Infof("discovering existing vol in %s", csijsonfile)
+
+    _, ferr := os.Lstat(csijsonfile)
+    if os.IsNotExist(ferr) {
+        glog.V(4).Infof("no found configure file %s", csijsonfile)
+        return 
+    }
+    filePtr, err := os.Open(csijsonfile)
+    if err != nil {
+        fmt.Println("Open file failed [Err:%s]", err.Error())
+        return
+    }
+    defer filePtr.Close()
+
+
+    decoder := json.NewDecoder(filePtr)
+    err = decoder.Decode(&cetusFSVolumes)
+    if err != nil {
+        fmt.Println("Decoder failed", err.Error())
+
+    } else {
+        fmt.Println("Decoder success")
+        fmt.Println("load volume ", cetusFSVolumes)
+    }
+    
+}
+
+func saveExistingVol() {
+    csijsonfile := "/etc/neucli/cetusfs_csi_info.json"
+    if ferr := os.MkdirAll(filepath.Dir(csijsonfile), os.FileMode(0755)); ferr != nil {
+        glog.V(4).Infof("can not open /etc/neucli/flexblock_csi_info.json file: %v", ferr)
+        return
+    }
+    csiinfofile, fileerr := os.OpenFile(csijsonfile, syscall.O_RDWR|syscall.O_CREAT|syscall.O_TRUNC, 0666)
+    if fileerr != nil {
+        glog.V(4).Infof("can not open /etc/neucli/flexblock_csi_info.json file: %v", fileerr)
+        return
+    }
+    defer csiinfofile.Close() // in case we fail before the explicit close
+
+    encoder := json.NewEncoder(csiinfofile)
+    jsonerr := encoder.Encode(cetusFSVolumes)
+    if jsonerr != nil {
+        glog.V(4).Infof("Encoder failed", jsonerr)
+    }
+
+}
+
 func discoverExistingSnapshots() {
     glog.V(4).Infof("discovering existing snapshots in %s", dataRoot)
     files, err := ioutil.ReadDir(dataRoot)
@@ -167,6 +219,7 @@ func (hp *cetusFS) Run() {
     hp.ns = NewNodeServer(hp.nodeID, hp.ephemeral, hp.maxVolumesPerNode)
     hp.cs = NewControllerServer(hp.ephemeral, hp.nodeID)
 
+    discoverExistingVol()
     discoverExistingSnapshots()
     s := NewNonBlockingGRPCServer()
     s.Start(hp.endpoint, hp.ids, hp.cs, hp.ns)
@@ -254,6 +307,9 @@ func createCetusfsVolume(volID, name string, cap int64, volAccessType accessType
         Ephemeral:     ephemeral,
     }
     cetusFSVolumes[volID] = cetusfsVol
+
+    saveExistingVol()
+
     return &cetusfsVol, nil
 }
 
@@ -267,6 +323,9 @@ func updateCetusfsVolume(volID string, volume cetusFSVolume) error {
     }
 
     cetusFSVolumes[volID] = volume
+
+    saveExistingVol()
+
     return nil
 }
 
@@ -294,6 +353,9 @@ func deleteCetusfsVolume(volID string) error {
         return err
     }
     delete(cetusFSVolumes, volID)
+
+    saveExistingVol()
+
     return nil
 }
 
