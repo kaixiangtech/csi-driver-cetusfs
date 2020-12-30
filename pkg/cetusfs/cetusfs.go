@@ -26,6 +26,7 @@ import (
     "strings"
     "syscall"
     "encoding/json"
+    "bufio"
 
     "github.com/golang/glog"
     "google.golang.org/grpc/codes"
@@ -268,6 +269,39 @@ func createCetusfsVolume(volID, name string, cap int64, volAccessType accessType
         if err != nil {
             return nil, err
         }
+        volconffile := "/etc/neucli/cetusfs_plugin_vol.info"
+        _, ferr := os.Stat(volconffile)
+        if ferr == nil {
+            f, eerr := os.Open(volconffile)
+            if eerr == nil {
+                reader := bufio.NewReader(f);
+                line, _, rerr := reader.ReadLine();
+                if rerr == nil {
+                    volname := string(line)
+
+                    var cmd []string
+                    executor := utilexec.New()
+                    size := fmt.Sprintf("%dM", cap/mib)
+
+                    cmd = []string{"cetusadm", "quota", volname, "enable"}
+                    glog.V(4).Infof("Command Start: %v", cmd)
+                    outumount, errumount := executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                    glog.V(4).Infof("Command Finish: %v", string(outumount))
+                    if errumount != nil {
+                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                    }
+
+                    cmd = []string{"cetusadm", "quota", volname, "limit", "/"+volID, size+"B"}
+                    glog.V(4).Infof("Command Start: %v", cmd)
+                    outumount, errumount = executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                    glog.V(4).Infof("Command Finish: %v", string(outumount))
+                    if errumount != nil {
+                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                    }
+
+                }
+            }
+        }
     case blockAccess:
         executor := utilexec.New()
         size := fmt.Sprintf("%dM", cap/mib)
@@ -317,9 +351,46 @@ func createCetusfsVolume(volID, name string, cap int64, volAccessType accessType
 func updateCetusfsVolume(volID string, volume cetusFSVolume) error {
     glog.V(4).Infof("updating cetusfs volume: %s", volID)
 
-    if _, err := getVolumeByID(volID); err != nil {
+    vol, err := getVolumeByID(volID)
+    if err != nil {
         // Return OK if the volume is not found.
         return nil
+    }
+    if vol.VolAccessType == mountAccess {
+        volconffile := "/etc/neucli/cetusfs_plugin_vol.info"
+        _, ferr := os.Stat(volconffile)
+        if ferr == nil {
+            f, eerr := os.Open(volconffile)
+            if eerr == nil {
+                reader := bufio.NewReader(f);
+                line, _, rerr := reader.ReadLine();
+                if rerr == nil {
+                    volname := string(line)
+
+                    var cmd []string
+                    executor := utilexec.New()
+                    size := fmt.Sprintf("%dM", volume.VolSize/mib)
+
+                    cmd = []string{"cetusadm", "quota", volname, "enable"}
+                    glog.V(4).Infof("Command Start: %v", cmd)
+                    outumount, errumount := executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                    glog.V(4).Infof("Command Finish: %v", string(outumount))
+                    if errumount != nil {
+                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                    }
+
+                    cmd = []string{"cetusadm", "quota", volname, "limit", "/"+volID, size+"B"}
+                    glog.V(4).Infof("Command Start: %v", cmd)
+                    outumount, errumount = executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                    glog.V(4).Infof("Command Finish: %v", string(outumount))
+                    if errumount != nil {
+                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                    }
+
+                }
+            }
+        }
+
     }
 
     cetusFSVolumes[volID] = volume
@@ -335,6 +406,31 @@ func deleteCetusfsVolume(volID string) error {
 
     vol, err := getVolumeByID(volID)
     if err != nil {
+        volconffile := "/etc/neucli/cetusfs_plugin_vol.info"
+        _, ferr := os.Stat(volconffile)
+        if ferr == nil {
+            f, eerr := os.Open(volconffile)
+            if eerr == nil {
+                reader := bufio.NewReader(f);
+                line, _, rerr := reader.ReadLine();
+                if rerr == nil {
+                    volname := string(line)
+
+                    var cmd []string
+                    executor := utilexec.New()
+
+                    cmd = []string{"cetusadm", "quota", volname, "unlimit", "/"+volID}
+                    glog.V(4).Infof("Command Start: %v", cmd)
+                    outumount, errumount := executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                    glog.V(4).Infof("Command Finish: %v", string(outumount))
+                    if errumount != nil {
+                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                    }
+
+                }
+            }
+        }
+
         // Return OK if the volume is not found.
         return nil
     }

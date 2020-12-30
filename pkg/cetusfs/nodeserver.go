@@ -321,6 +321,16 @@ func (ns *nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
         return nil, status.Error(codes.InvalidArgument, "Volume path not provided")
     }
 
+    capRange := req.GetCapacityRange()
+    if capRange == nil {
+        return nil, status.Error(codes.InvalidArgument, "Capacity range not provided")
+    }
+
+    capacity := int64(capRange.GetRequiredBytes())
+    if capacity >= maxStorageCapacity {
+        return nil, status.Errorf(codes.OutOfRange, "Requested capacity %d exceeds maximum allowed %d", capacity, maxStorageCapacity)
+    }
+
     info, err := os.Stat(volPath)
     if err != nil {
         return nil, status.Errorf(codes.InvalidArgument, "Could not get file information from %s: %v", volPath, err)
@@ -337,6 +347,13 @@ func (ns *nodeServer) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandV
         }
     default:
         return nil, status.Errorf(codes.InvalidArgument, "Volume %s is invalid", volID)
+    }
+
+    if vol.VolSize < capacity {
+        vol.VolSize = capacity
+        if err := updateCetusfsVolume(volID, vol); err != nil {
+            return nil, status.Errorf(codes.Internal, "Could not update volume %s: %v", volID, err)
+        }
     }
 
     return &csi.NodeExpandVolumeResponse{}, nil
