@@ -13,6 +13,7 @@ install:
 	mkdir -p ${DESTDIR}/lib/systemd/system/
 	mkdir -p ${DESTDIR}/usr/share/doc/cetusfsplugin/
 	mkdir -p ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/
+	mkdir -p ${DESTDIR}/csi-cetusfs-data-dir/
 	install -m 755 bin/cetusfsplugin $(DESTDIR)/usr/sbin/
 	install -m 644 systemctl/cetusfsplugin.service $(DESTDIR)/lib/systemd/system/
 	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-attacher.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-attacher.yaml

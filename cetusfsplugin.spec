@@ -21,6 +21,7 @@ make install DESTDIR=%{buildroot}
 /lib/systemd/system/cetusfsplugin.service
 /var/log/cetusfsplugin/
 /var/lib/kubelet/plugins/csi-cetusfs/
+/csi-cetusfs-data-dir/
 /usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-attacher.yaml
 /usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-driverinfo.yaml
 /usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-plugin.yaml
