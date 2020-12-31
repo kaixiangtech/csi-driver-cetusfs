@@ -1,4 +1,4 @@
-Name:   cetusfs
+Name:   cetusfsplugin
 Version:        %{VERSION}_%{CUR_BR}_%{GIT_COMMIT}
 Release:        %{?GIT_VER}
 Summary:        Kaixiangtech CetusFS k8s csi plugin
