@@ -406,6 +406,11 @@ func deleteCetusfsVolume(volID string) error {
 
     vol, err := getVolumeByID(volID)
     if err != nil {
+        // Return OK if the volume is not found.
+        return nil
+    }
+
+    if vol.VolAccessType == mountAccess {
         volconffile := "/etc/neucli/cetusfs_plugin_vol.info"
         _, ferr := os.Stat(volconffile)
         if ferr == nil {
@@ -431,8 +436,6 @@ func deleteCetusfsVolume(volID string) error {
             }
         }
 
-        // Return OK if the volume is not found.
-        return nil
     }
 
     if vol.VolAccessType == blockAccess {
