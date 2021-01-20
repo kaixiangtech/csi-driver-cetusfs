@@ -29,6 +29,9 @@ make install DESTDIR=%{buildroot}
 /usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-resizer.yaml
 /usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-testing.yaml
 /usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-storageclass.yaml
+/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-attacher-rbac.yaml
+/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-provisioner-rbac.yaml
+/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-resizer-rbac.yaml
 %doc
 
 

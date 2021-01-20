@@ -23,6 +23,9 @@ install:
 	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-resizer.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-resizer.yaml
 	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-testing.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-testing.yaml
 	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-storageclass.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-storageclass.yaml
+	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-attacher-rbac.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-attacher-rbac.yaml
+	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-provisioner-rbac.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-provisioner-rbac.yaml
+	install -m 644 deploy/kubernetes/cetusfs/csi-cetusfs-resizer-rbac.yaml ${DESTDIR}/usr/share/doc/cetusfsplugin/kubernetes/cetusfs/csi-cetusfs-resizer-rbac.yaml
 	systemctl daemon-reload
 uninstall:
 	rm -f /usr/sbin/cetusfsplugin
