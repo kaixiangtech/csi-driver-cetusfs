@@ -1,10 +1,12 @@
-kind: StatefulSet
+kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: csi-cetusfs-provisioner
+  labels:
+    app: csi-cetusfs-provisioner
 spec:
-  serviceName: "csi-cetusfs-provisioner"
-  replicas: 1
+  #serviceName: "csi-cetusfs-provisioner"
+  #replicas: 3
   selector:
     matchLabels:
       app: csi-cetusfs-provisioner

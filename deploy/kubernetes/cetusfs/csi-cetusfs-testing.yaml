@@ -18,13 +18,15 @@ spec:
   ports:
   - port: 10000 # fixed port inside the pod, dynamically allocated port outside
 ---
-kind: StatefulSet
+kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: csi-cetusfs-socat
+  labels:
+    app: csi-cetusfs-socat
 spec:
-  serviceName: "csi-cetusfs-socat"
-  replicas: 1
+  #serviceName: "csi-cetusfs-socat"
+  #replicas: 3
   selector:
     matchLabels:
       app: csi-cetusfs-socat

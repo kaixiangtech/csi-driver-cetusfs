@@ -1,10 +1,12 @@
-kind: StatefulSet
+kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: csi-cetusfs-attacher
+  labels:
+    app: csi-cetusfs-attacher
 spec:
-  serviceName: "csi-cetusfs-attacher"
-  replicas: 1
+  #serviceName: "csi-cetusfs-attacher"
+  #replicas: 3
   selector:
     matchLabels:
       app: csi-cetusfs-attacher

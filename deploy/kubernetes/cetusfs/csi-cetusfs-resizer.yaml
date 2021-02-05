@@ -1,10 +1,12 @@
-kind: StatefulSet
+kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: csi-cetusfs-resizer
+  labels:
+    app: csi-cetusfs-resizer
 spec:
-  serviceName: "csi-cetusfs-resizer"
-  replicas: 1
+  #serviceName: "csi-cetusfs-resizer"
+  #replicas: 3
   selector:
     matchLabels:
       app: csi-cetusfs-resizer

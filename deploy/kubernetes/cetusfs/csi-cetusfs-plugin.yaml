@@ -15,17 +15,15 @@ spec:
     - name: dummy
       port: 12345
 ---
-kind: StatefulSet
+kind: DaemonSet
 apiVersion: apps/v1
 metadata:
   name: csi-cetusfsplugin
+  labels:
+    app: csi-cetusfsplugin
 spec:
-  serviceName: "csi-cetusfsplugin"
-  # One replica only:
-  # Host path driver only works when everything runs
-  # on a single node. We achieve that by starting it once and then
-  # co-locate all other pods via inter-pod affinity
-  replicas: 1
+  #serviceName: "csi-cetusfsplugin"
+  #replicas: 3
   selector:
     matchLabels:
       app: csi-cetusfsplugin
