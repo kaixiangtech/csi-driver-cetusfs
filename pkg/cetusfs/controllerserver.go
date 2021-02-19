@@ -23,6 +23,9 @@ import (
     "path/filepath"
     "sort"
     "strconv"
+    "bufio"
+    "strings"
+    "io"
 
     "github.com/golang/protobuf/ptypes"
 
@@ -61,6 +64,7 @@ func NewControllerServer(ephemeral bool, nodeID string) *controllerServer {
         caps: getControllerServiceCapabilities(
             []csi.ControllerServiceCapability_RPC_Type{
                 csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+                csi.ControllerServiceCapability_RPC_GET_CAPACITY,
                 csi.ControllerServiceCapability_RPC_CREATE_DELETE_SNAPSHOT,
                 csi.ControllerServiceCapability_RPC_LIST_SNAPSHOTS,
                 csi.ControllerServiceCapability_RPC_CLONE_VOLUME,
@@ -121,9 +125,35 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
         return nil, status.Errorf(codes.OutOfRange, "Requested capacity %d exceeds maximum allowed %d", capacity, maxStorageCapacity)
     }
 
-    topologies := []*csi.Topology{&csi.Topology{
-        Segments: map[string]string{TopologyKeyNode: cs.nodeID},
-    }}
+    // topologies := []*csi.Topology{&csi.Topology{
+    //     Segments: map[string]string{TopologyKeyNode: cs.nodeID},
+    // }}
+
+    var topologies []*csi.Topology
+    nodelistfile := "/etc/neucli/cetusfs_plugin_node_list"
+    fnodelist, errnodelist := os.Open(nodelistfile)
+    if errnodelist != nil {
+        topologies = append(topologies, &csi.Topology{
+                        Segments: map[string]string{TopologyKeyNode: cs.nodeID},
+                    })
+    } else {
+        nodelistbuf := bufio.NewReader(fnodelist)
+        for {
+            line, readerr := nodelistbuf.ReadString('\n')
+            line = strings.TrimSpace(line)
+            if len(line) != 0{
+                topologies = append(topologies, &csi.Topology{
+                                Segments: map[string]string{TopologyKeyNode: line},
+                            })
+            }
+            if readerr != nil {
+                if readerr == io.EOF {
+                    break
+                }
+                break
+            }
+        }
+    }
 
     // Need to check for already existing volume name, and if found
     // check for the requested capacity and already allocated capacity
@@ -161,7 +191,9 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
         }, nil
     }
 
-    volumeID := uuid.NewUUID().String()
+    pvcName := req.GetName()
+    volumeID := pvcName[4:len(pvcName)]
+    // volumeID := uuid.NewUUID().String()
 
     vol, err := createCetusfsVolume(volumeID, req.GetName(), capacity, requestedAccessType, false /* ephemeral */)
     if err != nil {
