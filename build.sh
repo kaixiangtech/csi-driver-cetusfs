@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION='21.01.01.1'
+VERSION='21.01.02.1'
 GIT_VER=$(git rev-list HEAD| wc -l)
 CUR_BR=$(git branch -a| grep '*'|awk '{print $NF}'|sed 's/)//g')
 GIT_COMMIT=$(git rev-parse --short HEAD)
