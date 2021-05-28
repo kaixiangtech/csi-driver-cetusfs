@@ -27,6 +27,10 @@ import (
     "syscall"
     "encoding/json"
     "bufio"
+    "crypto/md5"
+    "encoding/hex"
+    "net/http"
+    "net/url"
 
     "github.com/golang/glog"
     "google.golang.org/grpc/codes"
@@ -85,6 +89,7 @@ var (
 
     cetusFSVolumes         map[string]cetusFSVolume
     cetusFSVolumeSnapshots map[string]cetusFSSnapshot
+    confinfo               map[string]string
 )
 
 const (
@@ -100,6 +105,386 @@ const (
 func init() {
     cetusFSVolumes = map[string]cetusFSVolume{}
     cetusFSVolumeSnapshots = map[string]cetusFSSnapshot{}
+    confinfo = map[string]string{}
+    conffile := "/etc/neucli/cetusfs_plugin.cfg"
+    fconf, errconf := os.Open(conffile)
+    if errconf != nil {
+        glog.V(4).Infof("open plugin cfg file error : %v", errconf)
+        return
+    }
+    confbuf := bufio.NewReader(fconf)
+    for {
+        line, readerr := confbuf.ReadString('\n')
+        if readerr != nil {
+            break
+        }
+        line = strings.TrimSpace(line)
+        seqindex := strings.Index(line, "=")
+        if seqindex > 0 {
+            confinfo[line[:seqindex]] = line[seqindex+1:]
+        }
+    }
+}
+
+func getCetusVol(clusterid int, poolid int, volumename string) (int, error){
+    storagemngip := confinfo["storagemngip"]
+    storagemngport := confinfo["storagemngport"]
+    endpoint := "http://"+storagemngip+":"+storagemngport
+    mngtoken := confinfo["mngtoken"]
+
+    client := &http.Client{}
+
+
+    gettokenuri := endpoint+"/mng/dfsVolume"
+    req, err := http.NewRequest("GET", gettokenuri, nil)
+    if err != nil{
+        glog.V(4).Infof("new request get volume  error")
+        return -1, nil
+    }
+    req.Header.Add("X_auth_token", mngtoken)
+    req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+    resp, resperr := client.Do(req)
+    if resperr != nil{
+        glog.V(4).Infof("request get volume error")
+        return -1, nil
+    }
+    if resp.StatusCode != 200 {
+        glog.V(4).Infof("response get volume info  status code not 200")
+        return -1, nil
+    }
+    defer resp.Body.Close()
+    respbody, _ := ioutil.ReadAll(resp.Body)
+
+    type Volinfo struct {
+        VolumeId int `json:"volumeId"`
+        ClusterId int `json:"clusterId"`
+        VolumeName string `json:"volumeName"`
+        PoolId int `json:"poolId"`
+        CreateType int `json:"createType"`
+        Status string `json:"status"`
+        OperatingStatus string `json:"operatingStatus"`
+        DfsRunStatus string `json:"dfsRunStatus"`
+        CreateTime string `json:"createTime"`
+        Description string `json:"description"`
+        CapacityTotal int `json:"capacityTotal"`
+        CapacityUsed int `json:"capacityUsed"`
+        ClusterName string `json:"clusterName"`
+        PoolName string `json:"poolName"`
+        VolGroupId int `json:"volGroupId"`
+        IsOperating bool `json:"isOperating"`
+        SnapEnable bool `json:"snapEnable"`
+        SysUserId int `json:"sysUserId"`
+        MarkDel int `json:"markDel"`
+        VolumeNum int `json:"volumeNum"`
+        AutoPackSelect bool `json:"autoPackSelect"`
+    }
+
+    type ALLVolinfo struct {
+        Result string `json:"result"`
+        Params []Volinfo `json:"params"`
+    }
+    var allvinfos ALLVolinfo
+
+    json.Unmarshal([]byte(string(respbody)), &allvinfos)
+
+    vid := 0
+    for i := 0; i < len(allvinfos.Params); i++ {
+        if clusterid == allvinfos.Params[i].ClusterId && poolid == allvinfos.Params[i].PoolId {
+            if volumename == allvinfos.Params[i].VolumeName {
+                vid = allvinfos.Params[i].VolumeId
+                break
+            }
+        }
+    }
+    return vid, nil
+}
+
+func setCetusQuota(volumeid int, path string, cap int64) (error){
+    storagemngip := confinfo["storagemngip"]
+    storagemngport := confinfo["storagemngport"]
+    endpoint := "http://"+storagemngip+":"+storagemngport
+    mngtoken := confinfo["mngtoken"]
+
+    client := &http.Client{}
+
+    createjson := fmt.Sprintf("{\"path\":\"%s\",\"limitsize\":\"%d\"}", path, cap)
+    createpayload := strings.NewReader(createjson)
+    gettokenuri := fmt.Sprintf("%s/mng/dfsVolume/%d/quota", endpoint, volumeid)
+    glog.V(4).Infof("new request create volume quota  %v : %v", gettokenuri, createjson)
+    req, err := http.NewRequest("POST", gettokenuri, createpayload)
+    if err != nil{
+        glog.V(4).Infof("new request get volume  error")
+        return  nil
+    }
+    req.Header.Add("X_auth_token", mngtoken)
+    req.Header.Add("Content-Type", "application/json")
+    resp, resperr := client.Do(req)
+    if resperr != nil{
+        glog.V(4).Infof("request get volume error")
+        return nil
+    }
+    if resp.StatusCode != 200 {
+        glog.V(4).Infof("response get volume info  status code not 200")
+        return nil
+    }
+    return nil
+}
+
+func updateCetusQuota(volumeid int, path string, cap int64) (error){
+    storagemngip := confinfo["storagemngip"]
+    storagemngport := confinfo["storagemngport"]
+    endpoint := "http://"+storagemngip+":"+storagemngport
+    mngtoken := confinfo["mngtoken"]
+
+    client := &http.Client{}
+
+    createjson := fmt.Sprintf("{\"path\":\"%s\",\"limitsize\":\"%d\"}", path, cap)
+    createpayload := strings.NewReader(createjson)
+    gettokenuri := fmt.Sprintf("%s/mng/dfsVolume/%d/quota", endpoint, volumeid)
+    glog.V(4).Infof("new request update volume quota %v : %v", gettokenuri, createjson)
+    req, err := http.NewRequest("PUT", gettokenuri, createpayload)
+    if err != nil{
+        glog.V(4).Infof("new request get volume  error")
+        return  nil
+    }
+    req.Header.Add("X_auth_token", mngtoken)
+    req.Header.Add("Content-Type", "application/json")
+    resp, resperr := client.Do(req)
+    if resperr != nil{
+        glog.V(4).Infof("request get volume error")
+        return nil
+    }
+    if resp.StatusCode != 200 {
+        glog.V(4).Infof("response get volume info  status code not 200")
+        return nil
+    }
+    return nil
+}
+
+func delCetusQuota(volumeid int, path string) (error){
+    storagemngip := confinfo["storagemngip"]
+    storagemngport := confinfo["storagemngport"]
+    endpoint := "http://"+storagemngip+":"+storagemngport
+    mngtoken := confinfo["mngtoken"]
+
+    client := &http.Client{}
+
+    gettokenuri := fmt.Sprintf("%s/mng/dfsVolume/%d/quota/%s", endpoint, volumeid, path)
+    glog.V(4).Infof("new request delete volume quota  %v ", gettokenuri)
+    req, err := http.NewRequest("DELETE", gettokenuri, nil)
+    if err != nil{
+        glog.V(4).Infof("new request get volume  error")
+        return  nil
+    }
+    req.Header.Add("X_auth_token", mngtoken)
+    req.Header.Add("Content-Type", "application/json")
+    resp, resperr := client.Do(req)
+    if resperr != nil{
+        glog.V(4).Infof("request get volume error")
+        return nil
+    }
+    if resp.StatusCode != 200 {
+        glog.V(4).Infof("response get volume info  status code not 200")
+        return nil
+    }
+    return nil
+}
+
+func getClusterID() (int, int, int, error){
+    storageclusterid := -1
+    storagepoolid := -1
+    serviceclusterid := -1
+
+    if confinfo["csimod"] == "" || confinfo["csimod"] == "local" {
+        glog.V(4).Infof("plugin cfg mod local")
+        return 0, 0, 0, nil
+    }
+    storagemngip := confinfo["storagemngip"]
+    storagemngport := confinfo["storagemngport"]
+    username := confinfo["storagemngusername"]
+    password := confinfo["storagemngpassword"]
+    poolname := confinfo["storagemngpoolname"]
+    serclustername := confinfo["storagemngsercluster"]
+
+    endpoint := "http://"+storagemngip+":"+storagemngport
+
+    bytepass := []byte(password)
+    passmd5 := md5.Sum(bytepass)
+    bytepass = []byte(hex.EncodeToString(passmd5[:]))
+    passmd5 = md5.Sum(bytepass)
+    passwordmd5 := hex.EncodeToString(passmd5[:])
+
+    client := &http.Client{}
+
+    gettokenuri := endpoint+"/mng/j_spring_security_check_kxapi"
+    data := url.Values{"password":{passwordmd5},"username":{username}}
+    body := strings.NewReader(data.Encode())
+    req, err := http.NewRequest("POST", gettokenuri, body)
+    if err != nil{
+        glog.V(4).Infof("new request error")
+        return -1, -1, -1, nil
+    }
+    req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+    resp, resperr := client.Do(req)
+    if resperr != nil{
+        glog.V(4).Infof("request token error")
+        return -1, -1, -1, nil
+    }
+    mngtoken := resp.Header.Get("X_auth_token")
+    confinfo["mngtoken"] = mngtoken
+
+    getclusterinfouri := endpoint+"/mng/neuStorCluster?infoType=list&serClusterId=0"
+    req, err = http.NewRequest("GET", getclusterinfouri, nil)
+    if err != nil{
+        glog.V(4).Infof("new request storage cluster info  error")
+        return -1, -1, -1, nil
+    }
+    req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+    req.Header.Add("X_auth_token", mngtoken)
+    resp, resperr = client.Do(req)
+    if resperr != nil{
+        glog.V(4).Infof("response storage cluster info  error")
+        return -1, -1, -1, nil
+    }
+    if resp.StatusCode != 200 {
+        glog.V(4).Infof("response storage cluster info  status code not 200")
+        return -1, -1, -1, nil
+    }
+    defer resp.Body.Close()
+    respbody, _ := ioutil.ReadAll(resp.Body)
+
+    type Clusterinfo struct {
+        ClusterId int `json:"clusterId"`
+        ClusterName string `json:"clusterName"`
+        Description string `json:"description"`
+        DeviceNum int `json:"deviceNum"`
+        BlockPoolNum int `json:"blockPoolNum"`
+        DfsPoolNum int `json:"dfsPoolNum"`
+        ObjPoolNum int `json:"objPoolNum"`
+        OperatingStatus string `json:"operatingStatus"`
+        HealthStatus string `json:"healthStatus"`
+    }
+
+    type ALLClusterinfo struct {
+        Result string `json:"result"`
+        Message string `json:"message"`
+        Params []Clusterinfo `json:"params"`
+    }
+    var allcinfos ALLClusterinfo
+
+    json.Unmarshal([]byte(string(respbody)), &allcinfos)
+    for i := 0; i < len(allcinfos.Params); i++ {
+        cid := fmt.Sprintf("%d", allcinfos.Params[i].ClusterId)
+        getpoolinfouri := endpoint+"/mng/neuStorCluster/"+cid+"/dfsPool?infoType=list"
+        req, err = http.NewRequest("GET", getpoolinfouri, nil)
+        if err != nil{
+            glog.V(4).Infof("new request storage pool info  error")
+            return -1, -1, -1, nil
+        }
+        req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+        req.Header.Add("X_auth_token", mngtoken)
+        resp, resperr = client.Do(req)
+        if resperr != nil{
+            glog.V(4).Infof("response storage pool info  error")
+            return -1, -1, -1, nil
+        }
+        if resp.StatusCode != 200 {
+            glog.V(4).Infof("response storage pool info  status code not 200")
+            return -1, -1, -1, nil
+        }
+        defer resp.Body.Close()
+
+        respbody, _ := ioutil.ReadAll(resp.Body)
+
+        type Poolinfo struct {
+            DfsPoolId int `json:"dfsPoolId"`
+            PoolName string `json:"poolName"`
+            CapacityTotal int `json:"capacityTotal"`
+            Description string `json:"description"`
+            OperatingStatus string `json:"operatingStatus"`
+            HealthStatus string `json:"healthStatus"`
+            HasDisk bool `json:"hasDisk"`
+        }
+
+
+        type ALLPoolinfo struct {
+            Result string `json:"result"`
+            Params []Poolinfo `json:"params"`
+        }
+        var allpinfos ALLPoolinfo
+
+        json.Unmarshal([]byte(string(respbody)), &allpinfos)
+        findpoolid := false
+        for j := 0; j < len(allpinfos.Params); j++ {
+            if allpinfos.Params[j].PoolName == poolname {
+                findpoolid = true
+                storageclusterid = allcinfos.Params[i].ClusterId
+                storagepoolid = allpinfos.Params[j].DfsPoolId
+                //serviceclusterid := -1
+                break
+            }
+        }
+        if findpoolid {
+            break
+        }
+    }
+    for k := 0; k < len(allcinfos.Params); k++ {
+        cid := fmt.Sprintf("%d", allcinfos.Params[k].ClusterId)
+        getserclusterinfouri := endpoint+"/mng/sercluster?infoType=list&clusterType=1&storClusterId="+cid
+        req, err = http.NewRequest("GET", getserclusterinfouri, nil)
+        if err != nil{
+            glog.V(4).Infof("new request service cluster info  error")
+            return -1, -1, -1, nil
+        }
+        req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+        req.Header.Add("X_auth_token", mngtoken)
+        resp, resperr = client.Do(req)
+        if resperr != nil{
+            glog.V(4).Infof("response service cluster info  error")
+            return -1, -1, -1, nil
+        }
+        if resp.StatusCode != 200 {
+            glog.V(4).Infof("response service cluster info  status code not 200")
+            return -1, -1, -1, nil
+        }
+        defer resp.Body.Close()
+
+        respbody, _ := ioutil.ReadAll(resp.Body)
+
+        type SerClusterinfo struct {
+            SerClusterId int `json:"id"`
+            ClusterName string `json:"clusterName"`
+            ClusterType int `json:"clusterType"`
+            StorClusterId int `json:"storClusterId"`
+            Description string `json:"description"`
+            StorClusterName string `json:"storClusterName"`
+            OperatingStatus string `json:"operatingStatus"`
+        }
+
+
+        type ALLSerClusterinfo struct {
+            Result string `json:"result"`
+            Message string `json:"message"`
+            Params []SerClusterinfo `json:"params"`
+        }
+        var allsinfos ALLSerClusterinfo
+
+        json.Unmarshal([]byte(string(respbody)), &allsinfos)
+        findserclusterid := false
+        for j := 0; j < len(allsinfos.Params); j++ {
+            if allsinfos.Params[j].ClusterName == serclustername {
+                findserclusterid = true
+                serviceclusterid = allsinfos.Params[j].SerClusterId
+                break
+            }
+        }
+        if findserclusterid {
+            break
+        }
+    }
+
+    return storageclusterid, storagepoolid, serviceclusterid, nil
+
 }
 
 func NewCetusFSDriver(driverName, nodeID, endpoint string, ephemeral bool, maxVolumesPerNode int64, version string) (*cetusFS, error) {
@@ -283,20 +668,33 @@ func createCetusfsVolume(volID, name string, cap int64, volAccessType accessType
                     executor := utilexec.New()
                     size := fmt.Sprintf("%dM", cap/mib)
 
-                    cmd = []string{"cetusadm", "quota", volname, "enable"}
-                    glog.V(4).Infof("Command Start: %v", cmd)
-                    outumount, errumount := executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
-                    glog.V(4).Infof("Command Finish: %v", string(outumount))
-                    if errumount != nil {
-                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                    storclusterid, storpoolid, _, getclustererr := getClusterID()
+                    if getclustererr != nil {
+                        return nil, status.Errorf(codes.Internal, "failed get cluster info %v", getclustererr)
                     }
+                    if storclusterid == 0 {
+                        cmd = []string{"cetusadm", "quota", volname, "enable"}
+                        glog.V(4).Infof("Command Start: %v", cmd)
+                        outumount, errumount := executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                        glog.V(4).Infof("Command Finish: %v", string(outumount))
+                        if errumount != nil {
+                            glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                        }
 
-                    cmd = []string{"cetusadm", "quota", volname, "limit", "/"+volID, size+"B"}
-                    glog.V(4).Infof("Command Start: %v", cmd)
-                    outumount, errumount = executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
-                    glog.V(4).Infof("Command Finish: %v", string(outumount))
-                    if errumount != nil {
-                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                        cmd = []string{"cetusadm", "quota", volname, "limit", "/"+volID, size+"B"}
+                        glog.V(4).Infof("Command Start: %v", cmd)
+                        outumount, errumount = executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                        glog.V(4).Infof("Command Finish: %v", string(outumount))
+                        if errumount != nil {
+                            glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                        }
+                    } else {
+                        vid, viderr := getCetusVol(storclusterid, storpoolid, volname)
+                        if viderr != nil {
+                            glog.V(4).Infof("failed get cetus volume %v: %v",viderr, volname)
+                        }
+                        glog.V(4).Infof("get cetus volume %v: %v",volname, vid)
+                        setCetusQuota(vid, "/"+volID, cap)
                     }
 
                 }
@@ -371,22 +769,33 @@ func updateCetusfsVolume(volID string, volume cetusFSVolume) error {
                     executor := utilexec.New()
                     size := fmt.Sprintf("%dM", volume.VolSize/mib)
 
-                    cmd = []string{"cetusadm", "quota", volname, "enable"}
-                    glog.V(4).Infof("Command Start: %v", cmd)
-                    outumount, errumount := executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
-                    glog.V(4).Infof("Command Finish: %v", string(outumount))
-                    if errumount != nil {
-                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                    storclusterid, storpoolid, _, getclustererr := getClusterID()
+                    if getclustererr != nil {
+                        return status.Errorf(codes.Internal, "failed get cluster info %v", getclustererr)
                     }
+                    if storclusterid == 0 {
+                        cmd = []string{"cetusadm", "quota", volname, "enable"}
+                        glog.V(4).Infof("Command Start: %v", cmd)
+                        outumount, errumount := executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                        glog.V(4).Infof("Command Finish: %v", string(outumount))
+                        if errumount != nil {
+                            glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                        }
 
-                    cmd = []string{"cetusadm", "quota", volname, "limit", "/"+volID, size+"B"}
-                    glog.V(4).Infof("Command Start: %v", cmd)
-                    outumount, errumount = executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
-                    glog.V(4).Infof("Command Finish: %v", string(outumount))
-                    if errumount != nil {
-                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                        cmd = []string{"cetusadm", "quota", volname, "limit", "/"+volID, size+"B"}
+                        glog.V(4).Infof("Command Start: %v", cmd)
+                        outumount, errumount = executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                        glog.V(4).Infof("Command Finish: %v", string(outumount))
+                        if errumount != nil {
+                            glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                        }
+                    } else {
+                        vid, viderr := getCetusVol(storclusterid, storpoolid, volname)
+                        if viderr != nil {
+                            glog.V(4).Infof("failed get cetus volume %v: %v",viderr, volname)
+                        }
+                        updateCetusQuota(vid, "/"+volID, volume.VolSize)
                     }
-
                 }
             }
         }
@@ -424,12 +833,24 @@ func deleteCetusfsVolume(volID string) error {
                     var cmd []string
                     executor := utilexec.New()
 
-                    cmd = []string{"cetusadm", "quota", volname, "unlimit", "/"+volID}
-                    glog.V(4).Infof("Command Start: %v", cmd)
-                    outumount, errumount := executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
-                    glog.V(4).Infof("Command Finish: %v", string(outumount))
-                    if errumount != nil {
-                        glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                    storclusterid, storpoolid, _, getclustererr := getClusterID()
+                    if getclustererr != nil {
+                        return status.Errorf(codes.Internal, "failed get cluster info %v", getclustererr)
+                    }
+                    if storclusterid == 0 {
+                        cmd = []string{"cetusadm", "quota", volname, "unlimit", "/"+volID}
+                        glog.V(4).Infof("Command Start: %v", cmd)
+                        outumount, errumount := executor.Command(cmd[0], cmd[1:]...).CombinedOutput()
+                        glog.V(4).Infof("Command Finish: %v", string(outumount))
+                        if errumount != nil {
+                            glog.V(4).Infof("failed update cetus quota  update target %v: %v", errumount, string(outumount))
+                        }
+                    } else {
+                        vid, viderr := getCetusVol(storclusterid, storpoolid, volname)
+                        if viderr != nil {
+                            glog.V(4).Infof("failed get cetus volume %v: %v",viderr, volname)
+                        }
+                        delCetusQuota(vid, "/"+volID)
                     }
 
                 }
